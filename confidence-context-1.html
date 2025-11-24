@@ -36,6 +36,7 @@
   .hist-shade{fill:var(--tailFill);stroke:none}
   .hist-shade-2{fill:#f9731644;stroke:none}
   .hist-shade-3{fill:#f9731644;stroke:none}
+  .hist-shade-p{fill:#3b82f6;fill-opacity:0.25;stroke:none}
   .draggable-veil{cursor:grab}
   .draggable-veil.disabled{cursor:not-allowed}
   .draggable-veil:active{cursor:grabbing}
@@ -51,8 +52,9 @@
   .tail-area-orange{fill:var(--orange);fill-opacity:0.25;stroke:none}
   .tail-line-orange-alt{stroke:#f97316;stroke-width:2}
   .tail-area-orange-alt{fill:#f97316;fill-opacity:0.25;stroke:none}
-  .power-area{fill:#f97316;fill-opacity:0.4;stroke:none}
+  .power-area{fill:#e67e22;fill-opacity:0.4;stroke:none}
   .type2-area{fill:#fbbf24;fill-opacity:0.3;stroke:none}
+  .p-area{fill:#3b82f6;fill-opacity:0.25;stroke:none}
   .seg{display:inline-flex;border:1px solid #ddd;border-radius:10px;overflow:hidden}
   .seg button{border:none;background:#f8f8f8;padding:6px 10px}
   .seg button+button{border-left:1px solid #ddd}
@@ -68,6 +70,7 @@
   .icon-toggle.active svg line{stroke:#fff}
   .icon-toggle.active svg rect{fill:#fff;stroke:#fff}
   .icon-toggle span{color:#333;font-weight:700;font-size:16px}
+  .icon-toggle span.p-icon{color:#3b82f6}
   .icon-toggle.active span{color:#fff}
   .overlay-btn{
     position:absolute; z-index:2; transform:translate(-50%,0);
@@ -265,13 +268,17 @@
         </svg>
       </button>
 
-      <button id="histogramBtn" class="icon-toggle active" title="Toggle histogram/curve view">
+      <button id="histogramBtn" class="icon-toggle" title="Toggle histogram/curve view">
         <svg viewBox="0 0 20 20" fill="none">
           <rect x="2" y="10" width="3" height="8" fill="#60a5fa" stroke="#1e4ed8" stroke-width="0.5"/>
           <rect x="6" y="6" width="3" height="12" fill="#60a5fa" stroke="#1e4ed8" stroke-width="0.5"/>
           <rect x="10" y="8" width="3" height="10" fill="#60a5fa" stroke="#1e4ed8" stroke-width="0.5"/>
           <rect x="14" y="12" width="3" height="6" fill="#60a5fa" stroke="#1e4ed8" stroke-width="0.5"/>
         </svg>
+      </button>
+
+      <button id="pValueBtn" class="icon-toggle" title="Toggle p-value display">
+        <span class="p-icon">p</span>
       </button>
     </div>
   </div>
@@ -331,17 +338,23 @@
   const urlSecondDist = urlParams.get('seconddist');
   const urlPowerMode = urlParams.get('powermode');
   const urlVertLines = urlParams.get('vertlines');
+  const urlPValue = urlParams.get('pvalue');
   const urlDf = urlParams.get('df');
   const urlN = urlParams.get('n');
   const urlScale = urlParams.get('scale');
   const urlBins = urlParams.get('bins');
   
-  // Parse pregenerate parameter
-  const urlPregenerate = urlParams.get('pregenerate');
-  const shouldPregenerate = urlPregenerate === 'true' || urlPregenerate === 'TRUE';
+  // Parse color parameters
+  const urlMainColor = urlParams.get('main_color');
+  const urlAlphaColor = urlParams.get('alpha_color');
+  const urlPColor = urlParams.get('p_color');
+  const urlSecondaryColor = urlParams.get('secondary_color');
+  const urlPowerColor = urlParams.get('power_color');
+  const urlType2Color = urlParams.get('type2_color');
+  
   
   // Parse hide parameters
-  const hideSimulate = urlParams.get('hide_simulate') === 'true';
+  const hideSimulate = urlParams.get('hide_simulate') === null ? true : urlParams.get('hide_simulate') === 'true';
   const hideBeta = urlParams.get('hide_beta') === 'true';
   const hideSE = urlParams.get('hide_se') === 'true';
   const hideN = urlParams.get('hide_n') === 'true';
@@ -356,6 +369,102 @@
   const hideThirdDist = urlParams.get('hide_thirddist') === 'true' || urlParams.get('hide_thirddist') === 'TRUE';
   const hidePowerSeg = urlParams.get('hide_powermode') === 'true';
   const hideBInput = urlParams.get('hide_b') === 'true';
+  const hideP = urlParams.get('hide_p') === 'true' || urlParams.get('hide_p') === 'TRUE';
+  
+  // Apply color overrides if specified
+  function applyColorOverrides() {
+    const customStyles = [];
+    
+    if(urlMainColor) {
+      customStyles.push(`.hist-bar { fill: ${getMainFill()} !important; stroke: ${getMainStroke()} !important; }`);
+      customStyles.push(`.curve { stroke: ${getMainStroke()} !important; }`);
+    }
+    
+    if(urlAlphaColor) {
+      customStyles.push(`.tail-area { fill: ${urlAlphaColor} !important; }`);
+      customStyles.push(`.hist-shade { fill: ${urlAlphaColor} !important; }`);
+    }
+    
+    if(urlPColor) {
+      customStyles.push(`.p-area { fill: ${urlPColor} !important; }`);
+      customStyles.push(`.hist-shade-p { fill: ${urlPColor} !important; }`);
+    }
+    
+    if(urlSecondaryColor) {
+      customStyles.push(`.curve-second { stroke: ${getSecondaryStroke()} !important; }`);
+      customStyles.push(`.curve-third { stroke: ${getSecondaryStroke()} !important; }`);
+    }
+    
+    if(urlPowerColor) {
+      customStyles.push(`.power-area { fill: ${urlPowerColor} !important; }`);
+    }
+    
+    if(urlType2Color) {
+      customStyles.push(`.type2-area { fill: ${urlType2Color} !important; }`);
+      // Alpha regions in secondary distribution should use Type II error color
+      customStyles.push(`.tail-area-orange { fill: ${getSecondaryAlpha()} !important; }`);
+      customStyles.push(`.tail-area-orange-alt { fill: ${getSecondaryAlpha()} !important; }`);
+      customStyles.push(`.hist-shade-2 { fill: ${getSecondaryAlpha()} !important; }`);
+      customStyles.push(`.hist-shade-3 { fill: ${getSecondaryAlpha()} !important; }`);
+    }
+    
+    if(customStyles.length > 0) {
+      const styleElement = document.createElement('style');
+      styleElement.textContent = customStyles.join('\n');
+      document.head.appendChild(styleElement);
+    }
+  }
+  
+  applyColorOverrides();
+  
+  // Color helper functions for dynamic styling
+  function darkenColor(hex, amount = 0.3) {
+    // Remove # if present
+    hex = hex.replace('#', '');
+    
+    // Parse hex color
+    let r = parseInt(hex.substring(0, 2), 16);
+    let g = parseInt(hex.substring(2, 4), 16);  
+    let b = parseInt(hex.substring(4, 6), 16);
+    
+    // Darken by reducing RGB values
+    r = Math.max(0, Math.floor(r * (1 - amount)));
+    g = Math.max(0, Math.floor(g * (1 - amount)));
+    b = Math.max(0, Math.floor(b * (1 - amount)));
+    
+    // Convert back to hex
+    return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+  }
+  
+  function getMainColor() { return urlMainColor || '#60a5fa'; }
+  function getMainFill() { 
+    const baseColor = getMainColor();
+    return baseColor.length === 9 ? baseColor : baseColor + '55';
+  }
+  function getMainStroke() { 
+    const baseColor = getMainColor();
+    // Remove opacity suffix if present, then darken
+    const cleanColor = baseColor.length === 9 ? baseColor.slice(0, 7) : baseColor;
+    return darkenColor(cleanColor, 0.4);
+  }
+  function getAlphaColor() { return urlAlphaColor || '#1e3a8a44'; }
+  function getPColor() { return urlPColor || '#3b82f6'; }
+  function getSecondaryColor() { return urlSecondaryColor || '#f97316'; }
+  function getSecondaryFill() { 
+    const baseColor = getSecondaryColor();
+    return baseColor.length === 9 ? baseColor.slice(0, -2) + '55' : baseColor + '55';
+  }
+  function getSecondaryAlpha() { 
+    const baseColor = getType2Color();  // Use Type II error color for alpha regions in secondary distribution
+    return baseColor.length === 9 ? baseColor.slice(0, -2) + '44' : baseColor + '44';
+  }
+  function getSecondaryStroke() { 
+    const baseColor = getSecondaryColor();
+    const cleanColor = baseColor.length === 9 ? baseColor.slice(0, 7) : baseColor;
+    return darkenColor(cleanColor, 0.4);
+  }
+  function getPowerColor() { return urlPowerColor || '#e67e22'; }
+  function getType2Color() { return urlType2Color || '#fbbf24'; }
   
   // Default labels (LaTeX strings)
   let labelParamLatex = '\\beta';           // Population parameter (top marker)
@@ -421,6 +530,7 @@
   const powerSeg = document.getElementById('powerSeg');
   const vertLinesBtn = document.getElementById('vertLinesBtn');
   const histogramBtn = document.getElementById('histogramBtn');
+  const pValueBtn = document.getElementById('pValueBtn');
   const legendEl = document.getElementById('legend');
 
   let width = chartWrap.clientWidth, height = chartWrap.clientHeight;
@@ -459,6 +569,7 @@
   const histWrap = plotWrap.append('g').attr('class','hist-wrap');
   const histG    = histWrap.append('g').attr('class','hist');
   const histShadeG = histWrap.append('g').attr('class','hist-shade-wrap');
+  const histShadePG = histWrap.append('g').attr('class','hist-shade-p-wrap');
   const meanLine = histWrap.append('line').attr('class','mean-line');
   const meanLabel = histWrap.append('g').attr('class','mean-label');
   meanLabel.append('rect')
@@ -586,7 +697,8 @@
   let thirdDistMode = 'off';
   let powerMode = 'tails';
   let vertLinesMode = 'off';
-  let histogramMode = 'on';
+  let histogramMode = 'off';
+  let pValueMode = 'off';
   let vertLinesAttachment = 'cutoffs';
   let vertLineDistFromB = {left: 0, right: 0};
   let linkedMarks = {left: null, right: null};
@@ -634,16 +746,14 @@
   
   // Apply display mode parameters
   if(urlHistogram !== null) {
-    histogramMode = urlHistogram === 'on' ? 'on' : 'off';
-    if(histogramMode === 'off') {
+    // Only allow histogram=on if beta is also specified
+    if(urlHistogram === 'on' && urlBeta !== null) {
+      histogramMode = 'on';
+      histogramBtn.classList.add('active');
+    } else if(urlHistogram === 'off') {
+      histogramMode = 'off';
       histogramBtn.classList.remove('active');
     }
-  }
-  
-  // Override histogram mode to 'on' if pregenerate is true
-  if(shouldPregenerate) {
-    histogramMode = 'on';
-    histogramBtn.classList.add('active');
   }
   
   if(urlCurve !== null) {
@@ -696,6 +806,13 @@
     }
   }
   
+  if(urlPValue !== null) {
+    if(urlPValue === 'on') {
+      pValueMode = 'on';
+      pValueBtn.classList.add('active');
+    }
+  }
+  
   // Apply hide parameters
   if(hideSimulate) {
     regenBtn.parentElement.style.display = 'none';
@@ -741,6 +858,11 @@
   if(hideBInput) {
     bInput.style.display = 'none';
     bBtn.style.display = 'none';
+  }
+  if(hideP) {
+    pValueBtn.style.display = 'none';
+    pValueMode = 'off';
+    pValueBtn.classList.remove('active');
   }
   
   previousSE = getSE();
@@ -1000,11 +1122,15 @@
     if(histogramMode === 'on'){
       const bar=histG.selectAll('rect').data(bins,d => d.x0+'-'+d.x1);
       bar.enter().append('rect').attr('class','hist-bar')
+        .style('fill', getMainFill())
+        .style('stroke', getMainStroke())
         .attr('x',d => x(d.x0))
         .attr('width',d => Math.max(0,x(d.x1)-x(d.x0)-1))
         .attr('y',d => y(d.length))
         .attr('height',d => y(0)-y(d.length));
       bar
+        .style('fill', getMainFill())
+        .style('stroke', getMainStroke())
         .attr('x',d => x(d.x0))
         .attr('width',d => Math.max(0,x(d.x1)-x(d.x0)-1))
         .attr('y',d => y(d.length))
@@ -1014,8 +1140,8 @@
       if(secondDistMode === 'on'){
         const bar2=histG2.selectAll('rect').data(bins2,d => d.x0+'-'+d.x1);
         bar2.enter().append('rect').attr('class','hist-bar-2')
-          .style('fill','#f9731655')
-          .style('stroke','#f97316aa')
+          .style('fill', getSecondaryFill())
+          .style('stroke', getSecondaryStroke())
           .attr('x',d => x(d.x0))
           .attr('width',d => Math.max(0,x(d.x1)-x(d.x0)-1))
           .attr('y',d => y(d.length))
@@ -1033,8 +1159,8 @@
       if(thirdDistMode === 'on'){
         const bar3=histG3.selectAll('rect').data(bins3,d => d.x0+'-'+d.x1);
         bar3.enter().append('rect').attr('class','hist-bar-3')
-          .style('fill','#f9731655')
-          .style('stroke','#f97316aa')
+          .style('fill', getSecondaryFill())
+          .style('stroke', getSecondaryStroke())
           .attr('x',d => x(d.x0))
           .attr('width',d => Math.max(0,x(d.x1)-x(d.x0)-1))
           .attr('y',d => y(d.length))
@@ -1070,6 +1196,53 @@
     const sel3 = histShadeG3.selectAll('rect')
       .data(doShadeBars && thirdDistMode === 'on' ? bins3 : [], d => d.x0 + '-' + d.x1);
     sel3.exit().remove();
+    
+    // P-value histogram shading (light blue from b to tail)
+    // This is independent of alpha/CI shading, so do it before the early return
+    histShadePG.selectAll('rect').remove();
+    
+    const showHistPValue = pValueMode === 'on' && bValue !== null && !Number.isNaN(bValue) && histogramMode === 'on' && curveMode === 'off' && bins && bins.length > 0;
+    
+    if(showHistPValue) {
+      const beta = getBeta();
+      const betaVal = beta + shiftUnits;
+      const bLocal = bValue - shiftUnits;
+      
+      function pValueFrac(d) {
+        const w = d.x1 - d.x0; if (w <= 0) return 0;
+        
+        // Determine which tail based on b position relative to beta (in local coords)
+        if(bLocal > beta) {
+          // Shade right tail from b onwards
+          if (d.x0 >= bLocal) return 1;
+          if (d.x1 <= bLocal) return 0;
+          return (d.x1 - bLocal) / w;
+        } else {
+          // Shade left tail up to b
+          if (d.x1 <= bLocal) return 1;
+          if (d.x0 >= bLocal) return 0;
+          return (bLocal - d.x0) / w;
+        }
+      }
+      
+      histShadePG.selectAll('rect')
+        .data(bins, d => d.x0 + '-' + d.x1)
+        .enter().append('rect')
+        .attr('class','hist-shade-p')
+        .attr('x', d => x(d.x0))
+        .attr('width', d => Math.max(0, x(d.x1) - x(d.x0) - 1))
+        .attr('y', d => {
+          const frac = pValueFrac(d);
+          const fullH = y(0) - y(d.length);
+          const h = frac * fullH;
+          return y(0) - h;
+        })
+        .attr('height', d => {
+          const frac = pValueFrac(d);
+          const fullH = y(0) - y(d.length);
+          return frac * fullH;
+        });
+    }
     
     if (!doShadeBars) return;
 
@@ -1143,7 +1316,7 @@
           .data(bins2, d => d.x0 + '-' + d.x1);
         selPower.exit().remove();
         const mergedPower = selPower.enter().append('rect').attr('class','power-shade')
-          .style('fill','#f97316')
+          .style('fill', getPowerColor())
           .style('fill-opacity', 0.4)
           .merge(selPower);
         mergedPower
@@ -1166,7 +1339,7 @@
           .data(bins2, d => d.x0 + '-' + d.x1);
         selType2.exit().remove();
         const mergedType2 = selType2.enter().append('rect').attr('class','type2-shade')
-          .style('fill','#fbbf24')
+          .style('fill', getType2Color())
           .style('fill-opacity', 0.3)
           .merge(selType2);
         mergedType2
@@ -1189,7 +1362,7 @@
         histShadeG2.selectAll('rect.type2-shade').remove();
         
         const merged2 = sel2.enter().append('rect').attr('class','hist-shade-2')
-          .style('fill','#f9731644')
+          .style('fill', getSecondaryAlpha())
           .merge(sel2);
         merged2
           .attr('x', d => x(d.x0))
@@ -1211,7 +1384,7 @@
     // Third distribution tail shading (always in tails mode, never in power mode)
     if(thirdDistMode === 'on'){
       const merged3 = sel3.enter().append('rect').attr('class','hist-shade-3')
-        .style('fill','#f9731644')
+        .style('fill', getSecondaryAlpha())
         .merge(sel3);
       merged3
         .attr('x', d => x(d.x0))
@@ -1297,6 +1470,10 @@
       tailAreaL3.attr('d', null); tailAreaR3.attr('d', null);
       powerAreaL.attr('d', null); powerAreaR.attr('d', null);
       type2Area.attr('d', null);
+      
+      // Clear P-AREA before returning
+      overlayG.selectAll('.p-area').remove();
+      
       return;
     }
 
@@ -1332,11 +1509,11 @@
       if(showCurveAsFill){
         const areaGen = d3.area().x(d => x(d)).y0(plotH).y1(d => y(expected(d)));
         curvePath.attr('d', areaGen(xs));
-        curvePath.style('fill', '#60a5fa55').style('stroke', '#1e4ed8').style('stroke-width', '2');
+        curvePath.style('fill', getMainFill()).style('stroke', getMainStroke()).style('stroke-width', '2');
       } else {
         const lineGen = d3.line().x(d => x(d)).y(d => y(expected(d)));
         curvePath.attr('d', lineGen(xs));
-        curvePath.style('fill', 'none').style('stroke', '#1e4ed8').style('stroke-width', '2');
+        curvePath.style('fill', 'none').style('stroke', getMainStroke()).style('stroke-width', '2');
       }
     }
 
@@ -1347,11 +1524,11 @@
       if(showCurveAsFill){
         const areaGen2 = d3.area().x(d => x(d)).y0(plotH).y1(d => y(expected2(d)));
         curvePath2.attr('d', areaGen2(xs));
-        curvePath2.style('fill', '#f9731655').style('stroke', '#f97316').style('stroke-width', '2');
+        curvePath2.style('fill', getSecondaryFill()).style('stroke', getSecondaryStroke()).style('stroke-width', '2');
       } else {
         const lineGen2 = d3.line().x(d => x(d)).y(d => y(expected2(d)));
         curvePath2.attr('d', lineGen2(xs));
-        curvePath2.style('fill', 'none').style('stroke', '#f97316').style('stroke-width', '2');
+        curvePath2.style('fill', 'none').style('stroke', getSecondaryStroke()).style('stroke-width', '2');
       }
     }
 
@@ -1362,11 +1539,11 @@
       if(showCurveAsFill){
         const areaGen3 = d3.area().x(d => x(d)).y0(plotH).y1(d => y(expected3(d)));
         curvePath3.attr('d', areaGen3(xs));
-        curvePath3.style('fill', '#f9731655').style('stroke', '#f97316').style('stroke-width', '2');
+        curvePath3.style('fill', getSecondaryFill()).style('stroke', getSecondaryStroke()).style('stroke-width', '2');
       } else {
         const lineGen3 = d3.line().x(d => x(d)).y(d => y(expected3(d)));
         curvePath3.attr('d', lineGen3(xs));
-        curvePath3.style('fill', 'none').style('stroke', '#f97316').style('stroke-width', '2');
+        curvePath3.style('fill', 'none').style('stroke', getSecondaryStroke()).style('stroke-width', '2');
       }
     }
 
@@ -1441,6 +1618,33 @@
       powerAreaL.attr('d', null);
       powerAreaR.attr('d', null);
       type2Area.attr('d', null);
+    }
+    
+    // P-value areas (show tail from b to end) - only for curve display
+    // Use remove/recreate pattern for reliability  
+    overlayG.selectAll('.p-area').remove();
+    
+    const showPArea = (pValueMode === 'on') && (bValue !== null && !Number.isNaN(bValue)) && (curveMode !== 'off');
+    
+    if(showPArea) {
+      const betaVal = beta + shiftUnits;
+      const bLocal = bValue - shiftUnits;
+      
+      if(bLocal > beta) {
+        // Shade right tail from b to infinity (in local coordinates)
+        const xsR_p = [bLocal].concat(xs.filter(v => v > bLocal)).sort((a,b) => a-b);
+        const areaP = d3.area().x(d => x(d)).y0(plotH).y1(d => y(expected(d)));
+        overlayG.append('path')
+          .attr('class','p-area')
+          .attr('d', xsR_p.length ? areaP(xsR_p) : null);
+      } else {
+        // Shade left tail from -infinity to b (in local coordinates)
+        const xsL_p = xs.filter(v => v < bLocal).concat([bLocal]).sort((a,b) => a-b);
+        const areaP = d3.area().x(d => x(d)).y0(plotH).y1(d => y(expected(d)));
+        overlayG.append('path')
+          .attr('class','p-area')
+          .attr('d', xsL_p.length ? areaP(xsL_p) : null);
+      }
     }
   }
 
@@ -1669,6 +1873,16 @@
 
   function updatePTextToRightOfB(){
     const pValueLabelDiv = document.getElementById('pValueLabel');
+    
+    // Only show p-value if p-value mode is on
+    if(pValueMode === 'off') {
+      pTextRight.attr('display','none'); 
+      if(pValueLabelDiv) {
+        pValueLabelDiv.style.display = 'none';
+        pValueLabelDiv.style.opacity = '1';
+      }
+      return;
+    }
     
     if(bValue === null || Number.isNaN(bValue)){ 
       pTextRight.attr('display','none'); 
@@ -2497,11 +2711,10 @@
     emitTutorialEvent('changeSE', {value: newSE});
     
     // If we have existing samples, regenerate them with the new SE
-    // Otherwise just update the display
+    // Always regenerate at beta (not beta + shiftUnits) since the shift is applied visually
     if(currentN > 0) {
       const beta = getBeta();
-      const centerPos = beta + shiftUnits;
-      data = gaussian(currentN, centerPos, newSE);
+      data = gaussian(currentN, beta, newSE);
       if(secondDistMode === 'on'){
         data2 = [...data];
       }
@@ -2550,10 +2763,9 @@
     emitTutorialEvent('changeSE', {value: newSE});
     
     // If we have existing samples, regenerate them with the new SE
-    // Otherwise just update the display
+    // Always regenerate at beta (not beta + shiftUnits) since the shift is applied visually
     if(currentN > 0) {
-      const centerPos = beta + shiftUnits;
-      data = gaussian(currentN, centerPos, newSE);
+      data = gaussian(currentN, beta, newSE);
       if(secondDistMode === 'on'){
         data2 = [...data];
       }
@@ -2874,6 +3086,10 @@
     const oldCurveMode = curveMode;
     const newCurveMode = btn.getAttribute('data-curve');
     
+    console.log('=== CURVE BUTTON CLICKED ===');
+    console.log('oldCurveMode:', oldCurveMode);
+    console.log('newCurveMode:', newCurveMode);
+    
     // Check if beta is set before allowing curve to be shown
     if(newCurveMode !== 'off' && (betaValue === null || Number.isNaN(betaValue))){
       alert('You must set a value for the population parameter in order to show a curve.');
@@ -2883,6 +3099,10 @@
     curveSeg.querySelectorAll('button').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     curveMode = newCurveMode;
+    
+    console.log('curveMode after update:', curveMode);
+    console.log('About to call draw()...');
+    
     if(vertLinesMode === 'on' && vertLinesAttachment === 'b' && oldCurveMode !== curveMode){
       vertLinesAttachment = 'cutoffs';
       linkedMarks.left = null;
@@ -2890,6 +3110,8 @@
     }
     emitTutorialEvent('changeCurve', {value: curveMode});
     draw();
+    
+    console.log('=== END CURVE BUTTON ===');
   });
 
   dfInput.addEventListener('change', function(){
@@ -2994,10 +3216,37 @@
       histogramMode = 'off';
       histogramBtn.classList.remove('active');
     } else {
+      // Check if beta is set before allowing histogram
+      if(betaValue === null || Number.isNaN(betaValue)){
+        alert('You must enter a value for the population parameter in order to generate a histogram.');
+        return;
+      }
+      
       histogramMode = 'on';
       histogramBtn.classList.add('active');
+      
+      // Auto-generate samples if we don't have samples yet
+      if(currentN === 0) {
+        const beta = getBeta();
+        const se = getSE();
+        data = gaussian(1000, beta, se);
+        currentN = 1000;
+        isLockedToBeta = true;
+      }
     }
     emitTutorialEvent('toggleHistogram', {value: histogramMode});
+    draw();
+  });
+
+  pValueBtn.addEventListener('click', function(){
+    if(pValueMode === 'on'){
+      pValueMode = 'off';
+      pValueBtn.classList.remove('active');
+    } else {
+      pValueMode = 'on';
+      pValueBtn.classList.add('active');
+    }
+    emitTutorialEvent('togglePValue', {value: pValueMode});
     draw();
   });
 
@@ -3077,12 +3326,13 @@
   data = [];
   data2 = [];
   
-  // Pre-generate sampling distribution if requested
-  if(shouldPregenerate && betaValue !== null && !Number.isNaN(betaValue)) {
+  // Generate sampling distribution if histogram is on from URL
+  if(betaValue !== null && !Number.isNaN(betaValue) && histogramMode === 'on') {
     const se = getSE();
     const beta = getBeta();
     data = gaussian(1000, beta, se);
     currentN = 1000;
+    isLockedToBeta = true;
   }
   
   draw();
@@ -3114,6 +3364,7 @@
         b: bValue,
         simulateN: nValue,
         secondDist: secondDistMode === 'on',
+        thirdDist: thirdDistMode === 'on',
         powerMode: powerMode,
         scale: +scaleRange.value,
         bins: +binsRange.value,
@@ -3122,14 +3373,17 @@
         ci: ciMode,
         vertLines: vertLinesMode === 'on',
         histogram: histogramMode === 'on',
+        pValue: pValueMode === 'on',
         shiftUnits: shiftUnits,
         shiftUnits2: shiftUnits2,
+        shiftUnits3: shiftUnits3,
         currentN: currentN,
         isLockedToBeta: isLockedToBeta,
         domainOffset: domainOffset,
         fixedDomain: fixedDomain,
         data: [...data],
         data2: [...data2],
+        data3: [...data3],
         blueMarks: blueMarks.map(m => ({...m})),
         vertLinesAttachment: vertLinesAttachment,
         vertLineDistFromB: {...vertLineDistFromB},
@@ -3169,6 +3423,14 @@
           secondDistBtn.classList.add('active');
         } else {
           secondDistBtn.classList.remove('active');
+        }
+      }
+      if(state.thirdDist !== undefined) {
+        thirdDistMode = state.thirdDist ? 'on' : 'off';
+        if(state.thirdDist) {
+          thirdDistBtn.classList.add('active');
+        } else {
+          thirdDistBtn.classList.remove('active');
         }
       }
       if(state.powerMode !== undefined) {
@@ -3223,16 +3485,26 @@
           histogramBtn.classList.remove('active');
         }
       }
+      if(state.pValue !== undefined) {
+        pValueMode = state.pValue ? 'on' : 'off';
+        if(state.pValue) {
+          pValueBtn.classList.add('active');
+        } else {
+          pValueBtn.classList.remove('active');
+        }
+      }
       
       // Internal state
       if(state.shiftUnits !== undefined) shiftUnits = state.shiftUnits;
       if(state.shiftUnits2 !== undefined) shiftUnits2 = state.shiftUnits2;
+      if(state.shiftUnits3 !== undefined) shiftUnits3 = state.shiftUnits3;
       if(state.currentN !== undefined) currentN = state.currentN;
       if(state.isLockedToBeta !== undefined) isLockedToBeta = state.isLockedToBeta;
       if(state.domainOffset !== undefined) domainOffset = state.domainOffset;
       if(state.fixedDomain !== undefined) fixedDomain = state.fixedDomain;
       if(state.data !== undefined) data = [...state.data];
       if(state.data2 !== undefined) data2 = [...state.data2];
+      if(state.data3 !== undefined) data3 = [...state.data3];
       if(state.blueMarks !== undefined) {
         blueMarks = state.blueMarks.map(m => ({...m}));
         if(blueMarks.length > 0) {
